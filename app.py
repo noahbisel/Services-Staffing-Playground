@@ -202,7 +202,7 @@ if page == "📊 Dashboard":
                 text='Current Hours to Target'
             )
             fig.update_traces(texttemplate='%{text}%', textposition='outside')
-            fig.add_vline(x=100, line_dash="dash", line_color="red", annotation_text="100%")
+            # REMOVED: The red dashed line
             fig.update_layout(showlegend=False, margin=dict(l=0,r=0,t=0,b=0), height=350)
             st.plotly_chart(fig, use_container_width=True)
             
@@ -286,59 +286,4 @@ elif page == "✏️ Staffing Editor":
         edited = st.data_editor(df_view[cols_to_show], use_container_width=True, column_config={"Current Hours to Target": st.column_config.ProgressColumn("Util %", format="%d%%", min_value=0, max_value=100)}, disabled=['Current Hours to Target'], key="grid_main")
         
         if not edited.equals(df_view[cols_to_show]):
-            st.session_state.df.update(edited)
-            st.session_state.df = recalculate_utilization(st.session_state.df)
-            st.rerun()
-
-# --- PAGE: SETTINGS ---
-elif page == "⚙️ Settings":
-    st.title("⚙️ Settings")
-    st.info("💡 Note: In this Cloud Mode, uploads and edits are temporary (Private to you). They will reset if you refresh the page.")
-    
-    t1, t2, t3 = st.tabs(["📥 Data Import", "👤 People", "🏢 Programs"])
-    
-    with t1:
-        st.write("Upload a CSV to work with your own data in this session.")
-        up_file = st.file_uploader("Upload CSV", type=['csv'])
-        if up_file:
-             if 'last_processed' not in st.session_state or st.session_state.last_processed != up_file.name:
-                new_df = process_uploaded_file(up_file)
-                if not new_df.empty:
-                    if 'Employee' in new_df.columns: new_df = new_df.set_index('Employee')
-                    new_df = recalculate_utilization(new_df)
-                    st.session_state.df = new_df
-                    st.session_state.last_processed = up_file.name
-                    st.success("Data loaded for this session!")
-                    st.rerun()
-                    
-        if st.button("⚠️ Reset to Default", type="primary"):
-            st.session_state.clear()
-            st.rerun()
-
-    with t2:
-        with st.form("new_emp"):
-            st.subheader("Add Employee")
-            n = st.text_input("Name")
-            r = st.text_input("Role")
-            if st.form_submit_button("Add"):
-                if n and n not in st.session_state.df.index:
-                    new_row = {c:0 for c in st.session_state.df.columns}
-                    new_row['Role'] = r
-                    new_row['Capacity'] = 152
-                    st.session_state.df.loc[n] = pd.Series(new_row)
-                    st.rerun()
-                    
-    with t3:
-        c1, c2 = st.columns(2)
-        with c1:
-            n_prog = st.text_input("New Program Name")
-            if st.button("Add Program"):
-                if n_prog and n_prog not in st.session_state.df.columns:
-                    st.session_state.df[n_prog] = 0
-                    st.rerun()
-        with c2:
-            del_prog = st.selectbox("Delete Program", ["Select..."] + sorted(prog_cols))
-            if st.button("Delete"):
-                if del_prog != "Select...":
-                    st.session_state.df = st.session_state.df.drop(columns=[del_prog])
-                    st.rerun()
+            st.session_state.df
