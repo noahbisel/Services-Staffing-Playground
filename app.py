@@ -5,11 +5,9 @@ import os
 
 # --- 1. APP CONFIGURATION ---
 st.set_page_config(page_title="Staffing OS", layout="wide", page_icon="👥")
-# NOTE: We keep this variable to know what to load on startup, 
-# but we will STOP writing back to it.
 DEFAULT_DATA_FILE = 'staffing_db.csv'
 
-# --- 2. UTILITY FUNCTIONS (THE ENGINE) ---
+# --- 2. UTILITY FUNCTIONS ---
 
 def find_column(df, candidates):
     """Robustly finds a column name from a list of candidates (case-insensitive)."""
@@ -63,14 +61,12 @@ def process_uploaded_file(file):
         st.error(f"Error processing file: {e}")
         return pd.DataFrame()
 
-# REMOVED: save_to_disk function. 
-# We no longer save to the server to ensure user privacy.
-
 def recalculate_utilization(df):
     """Updates the 'Current Hours to Target' column based on allocated hours."""
     if df.empty: return df
 
     exclude = ['Capacity', 'Current Hours to Target']
+    # Identify numeric columns that are actually programs
     prog_cols = [c for c in df.select_dtypes(include=['number']).columns if c not in exclude]
 
     total_hours = df[prog_cols].sum(axis=1)
@@ -113,10 +109,8 @@ def get_role_metrics(df, role_list):
     unused_cap = total_cap - total_alloc
     return avg_util, unused_cap
 
-# --- 3. INIT & LOAD (READ-ONLY MODE) ---
+# --- 3. INIT & LOAD ---
 if 'df' not in st.session_state:
-    # Attempt to load the default "Master" CSV from the repo
-    # But we load it into MEMORY only, never writing back to it.
     if os.path.exists(DEFAULT_DATA_FILE):
         try:
             df = pd.read_csv(DEFAULT_DATA_FILE)
@@ -124,7 +118,6 @@ if 'df' not in st.session_state:
             st.session_state.df = recalculate_utilization(df)
         except: st.session_state.df = pd.DataFrame()
     else:
-        # Fallback Mock Data
         data = {
             'Employee': ['Mitch Ursick', 'Noah Bisel', 'Kevin Steger', 'Nicki Williams'],
             'Role': ['CSM', 'CE', 'CP', 'CE'],
@@ -202,8 +195,6 @@ if page == "📊 Dashboard":
                 text='Current Hours to Target'
             )
             fig.update_traces(texttemplate='%{text}%', textposition='outside')
-            fig.add_vline(x=100, line_dash="dash", line_color="red", annotation_text="100%")
-            # REMOVED: The red dashed line
             fig.update_layout(showlegend=False, margin=dict(l=0,r=0,t=0,b=0), height=350)
             st.plotly_chart(fig, use_container_width=True)
 
@@ -235,7 +226,8 @@ elif page == "✏️ Staffing Editor":
     if view == "Profile View (Detail)":
         focus = st.radio("Focus:", ["People", "Programs"], horizontal=True, label_visibility="collapsed")
         if focus == "People":
-            sel_emps = st.multiselect("Select Employees", sorted(df.index.astype(str)), placeholder="Select people to edit...")
+            # CASE INSENSITIVE SORT
+            sel_emps = st.multiselect("Select Employees", sorted(df.index.astype(str), key=str.casefold), placeholder="Select people to edit...")
             if sel_emps:
                 for name in sel_emps:
                     if name in df.index:
@@ -244,7 +236,10 @@ elif page == "✏️ Staffing Editor":
                         p_df = pd.DataFrame(row[prog_cols])
                         p_df.columns = ['Hours']
                         active = p_df[p_df['Hours'] > 0].index.tolist()
-                        to_edit = st.multiselect(f"Programs for {name}", prog_cols, default=active, key=f"sel_{name}")
+                        
+                        # CASE INSENSITIVE SORT
+                        to_edit = st.multiselect(f"Programs for {name}", sorted(prog_cols, key=str.casefold), default=active, key=f"sel_{name}")
+                        
                         edited = st.data_editor(p_df.loc[to_edit], use_container_width=True, column_config={"Hours": st.column_config.NumberColumn(min_value=0)}, key=f"ed_{name}")
 
                         if not edited.equals(p_df.loc[to_edit]):
@@ -252,9 +247,9 @@ elif page == "✏️ Staffing Editor":
                                 st.session_state.df.at[name, prog] = r['Hours']
                             st.session_state.df = recalculate_utilization(st.session_state.df)
                             st.rerun()
-
         else:
-            sel_progs = st.multiselect("Select Programs", sorted(prog_cols), placeholder="Select programs...")
+            # CASE INSENSITIVE SORT
+            sel_progs = st.multiselect("Select Programs", sorted(prog_cols, key=str.casefold), placeholder="Select programs...")
             if sel_progs:
                 for prog in sel_progs:
                     total = df[prog].sum()
@@ -265,7 +260,10 @@ elif page == "✏️ Staffing Editor":
                         t_df.columns = ['Hours']
                         if 'Role' in df.columns: t_df = t_df.join(df['Role'])
                         active = t_df[t_df['Hours'] > 0].index.tolist()
-                        to_edit = st.multiselect(f"Team for {prog}", df.index.tolist(), default=active, key=f"psel_{prog}")
+                        
+                        # CASE INSENSITIVE SORT
+                        to_edit = st.multiselect(f"Team for {prog}", sorted(df.index.tolist(), key=str.casefold), default=active, key=f"psel_{prog}")
+                        
                         edited = st.data_editor(t_df.loc[to_edit], use_container_width=True, column_config={"Hours": st.column_config.NumberColumn(min_value=0), "Role": st.column_config.TextColumn(disabled=True)}, key=f"ped_{prog}")
 
                         if not edited.equals(t_df.loc[to_edit]):
@@ -273,16 +271,21 @@ elif page == "✏️ Staffing Editor":
                                 st.session_state.df.at[emp, prog] = r['Hours']
                             st.session_state.df = recalculate_utilization(st.session_state.df)
                             st.rerun()
-
     else:
         c1, c2 = st.columns([2, 1])
         search = c1.text_input("🔍 Search", placeholder="Filter by name...")
-        df_view = df.copy()
+        
+        # CASE INSENSITIVE SORT for Grid View
+        df_view = df.copy().sort_index(key=lambda x: x.str.lower())
+        
         if search:
             mask = df_view.index.astype(str).str.contains(search, case=False)
             df_view = df_view[mask]
         active_progs = [c for c in prog_cols if df_view[c].sum() > 0]
-        sel_cols = st.multiselect("Active Programs (Add to view)", prog_cols, default=active_progs)
+        
+        # CASE INSENSITIVE SORT
+        sel_cols = st.multiselect("Active Programs (Add to view)", sorted(prog_cols, key=str.casefold), default=sorted(active_progs, key=str.casefold))
+        
         cols_to_show = [c for c in df_view.columns if c not in prog_cols] + sel_cols
         edited = st.data_editor(df_view[cols_to_show], use_container_width=True, column_config={"Current Hours to Target": st.column_config.ProgressColumn("Util %", format="%d%%", min_value=0, max_value=100)}, disabled=['Current Hours to Target'], key="grid_main")
 
@@ -294,7 +297,7 @@ elif page == "✏️ Staffing Editor":
 # --- PAGE: SETTINGS ---
 elif page == "⚙️ Settings":
     st.title("⚙️ Settings")
-    st.info("💡 Note: In this Cloud Mode, uploads and edits are temporary (Private to you). They will reset if you refresh the page.")
+    st.info("💡 Note: In this Cloud Mode, uploads and edits are temporary. They will reset if you refresh the page.")
     
     t1, t2, t3 = st.tabs(["📥 Data Import", "👤 People", "🏢 Programs"])
     
@@ -311,36 +314,54 @@ elif page == "⚙️ Settings":
                     st.session_state.last_processed = up_file.name
                     st.success("Data loaded for this session!")
                     st.rerun()
-                    
+        
         if st.button("⚠️ Reset to Default", type="primary"):
             st.session_state.clear()
             st.rerun()
 
     with t2:
-        with st.form("new_emp"):
-            st.subheader("Add Employee")
-            n = st.text_input("Name")
-            r = st.text_input("Role")
-            if st.form_submit_button("Add"):
-                if n and n not in st.session_state.df.index:
-                    new_row = {c:0 for c in st.session_state.df.columns}
-                    new_row['Role'] = r
-                    new_row['Capacity'] = 152
-                    st.session_state.df.loc[n] = pd.Series(new_row)
+        c1, c2 = st.columns(2)
+        with c1:
+            with st.form("new_emp"):
+                st.subheader("Add Employee")
+                n = st.text_input("Name")
+                r = st.text_input("Role")
+                if st.form_submit_button("Add"):
+                    if n and n not in st.session_state.df.index:
+                        new_row = {c:0 for c in st.session_state.df.columns}
+                        new_row['Role'] = r
+                        new_row['Capacity'] = 152
+                        st.session_state.df.loc[n] = pd.Series(new_row)
+                        st.session_state.df = recalculate_utilization(st.session_state.df)
+                        st.rerun()
+        with c2:
+            st.subheader("Delete Employee")
+            # CASE INSENSITIVE SORT
+            all_emps = sorted(st.session_state.df.index.tolist(), key=str.casefold)
+            del_emp = st.selectbox("Select Employee", ["Select..."] + all_emps)
+            if st.button("Delete Employee", type="primary"):
+                if del_emp != "Select...":
+                    st.session_state.df = st.session_state.df.drop(index=[del_emp])
+                    # Recalculate metrics immediately after deletion
+                    st.session_state.df = recalculate_utilization(st.session_state.df)
                     st.rerun()
                     
     with t3:
         c1, c2 = st.columns(2)
         with c1:
+            st.subheader("Add Program")
             n_prog = st.text_input("New Program Name")
             if st.button("Add Program"):
                 if n_prog and n_prog not in st.session_state.df.columns:
                     st.session_state.df[n_prog] = 0
+                    st.session_state.df = recalculate_utilization(st.session_state.df)
                     st.rerun()
         with c2:
-            del_prog = st.selectbox("Delete Program", ["Select..."] + sorted(prog_cols))
-            if st.button("Delete"):
+            st.subheader("Delete Program")
+            # CASE INSENSITIVE SORT
+            del_prog = st.selectbox("Select Program", ["Select..."] + sorted(prog_cols, key=str.casefold))
+            if st.button("Delete Program", type="primary"):
                 if del_prog != "Select...":
                     st.session_state.df = st.session_state.df.drop(columns=[del_prog])
+                    st.session_state.df = recalculate_utilization(st.session_state.df)
                     st.rerun()
-            st.session_state.df
