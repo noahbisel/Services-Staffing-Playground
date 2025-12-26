@@ -142,9 +142,11 @@ def calculate_margin(df, program_mrr_dict):
         mrr = program_mrr_dict.get(prog, 0)
         margin_pct = 0.0
         if mrr > 0:
-            margin_pct = ((mrr - cost) / mrr)
+            # Multiply by 100 here so 0.905 becomes 90.5
+            margin_pct = ((mrr - cost) / mrr) * 100
         else:
-            margin_pct = -1.0 if cost > 0 else 0.0
+            # Negative 100% if cost exists but no Revenue
+            margin_pct = -100.0 if cost > 0 else 0.0
             
         margin_data[prog] = {
             'mrr': mrr,
@@ -298,13 +300,13 @@ if page == "📊 Dashboard":
             for prog, data in margin_metrics.items():
                 table_data.append({
                     "Program": prog,
-                    "MRR": data['mrr'],
-                    "Extended Cost": data['cost'],
-                    "Margin %": data['margin_pct']
+                    "Program MRR": f"${data['mrr']:,.0f}", # Formatted with commas here
+                    # "Extended Cost" REMOVED
+                    "Contributing Margin": data['margin_pct']
                 })
             
             margin_df = pd.DataFrame(table_data)
-            margin_df = margin_df.sort_values(by="Margin %", ascending=False)
+            margin_df = margin_df.sort_values(by="Contributing Margin", ascending=False)
             
             st.dataframe(
                 margin_df, 
@@ -312,9 +314,8 @@ if page == "📊 Dashboard":
                 hide_index=True,
                 column_config={
                     "Program": st.column_config.TextColumn("Program"),
-                    "MRR": st.column_config.NumberColumn("Program MRR", format="$%d"),
-                    "Extended Cost": st.column_config.NumberColumn("Extended Cost", format="$%d"),
-                    "Margin %": st.column_config.NumberColumn("Contributing Margin", format="%.1f%%")
+                    "Program MRR": st.column_config.TextColumn("Program MRR"), # Render as Text to keep formatting
+                    "Contributing Margin": st.column_config.NumberColumn("Contributing Margin", format="%.1f%%")
                 }
             )
             
@@ -393,7 +394,8 @@ elif page == "✏️ Staffing Editor":
                     total = df[prog].sum()
                     
                     m_data = margin_metrics.get(prog, {})
-                    margin_pct_disp = m_data.get('margin_pct', 0) * 100
+                    # Base function now returns 90.5, so we NO LONGER multiply by 100 here
+                    margin_pct_disp = m_data.get('margin_pct', 0)
                     cost = m_data.get('cost', 0)
                     mrr = m_data.get('mrr', 0)
                     
