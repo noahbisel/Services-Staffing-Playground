@@ -223,7 +223,7 @@ if page == "📊 Dashboard":
     st.title("📊 Executive Dashboard")
 
     if not df.empty:
-        # --- TOP METRICS (FIXED: Uses Specific Math for Team Avg) ---
+        # --- TOP METRICS (New Math) ---
         # 1. Team Avg (Strictly ACP, CP, SCP, ACE, CE, SCE)
         team_util, team_alloc, team_cap = calculate_group_utilization(df, TEAM_ROLES)
         
@@ -267,12 +267,12 @@ if page == "📊 Dashboard":
         
         # --- LEFT: ALLOCATIONS BY PROGRAM ---
         with col_l:
-            st.subheader("Allocations by Program")
-            
-            # TOGGLES: Placed side-by-side above the table
+            # TOGGLES: Placed ABOVE the title
             tg1, tg2 = st.columns(2)
             include_ri = tg1.toggle("Include R+I Roles?", value=True)
             include_csm = tg2.toggle("Include CSM Roles?", value=True)
+            
+            st.subheader("Allocations by Program")
             
             # --- FILTER LOGIC (Unified for both tables) ---
             analysis_df = df.copy()
@@ -318,7 +318,6 @@ if page == "📊 Dashboard":
                         hide_index=True,
                         column_config={
                             "Program Name": st.column_config.TextColumn("Program Name"),
-                            # Render as Text to keep the comma formatting string we created
                             "Program MRR": st.column_config.TextColumn("Program MRR"),
                             "Total Hours": st.column_config.NumberColumn("Total Hours", format="%d"),
                             "Contributing Margin": st.column_config.NumberColumn("Contributing Margin", format="%.1f%%")
@@ -329,7 +328,7 @@ if page == "📊 Dashboard":
 
         # --- RIGHT: ALLOCATIONS BY EMPLOYEE ---
         with col_r:
-            # Spacer to align headers visually with the left side toggles
+            # Spacer to align headers visually with the left side (compensating for toggles)
             st.write("") 
             st.write("") 
             st.write("") 
