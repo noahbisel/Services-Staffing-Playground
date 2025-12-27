@@ -5,6 +5,7 @@ import os
 
 # --- 1. APP CONFIGURATION ---
 st.set_page_config(page_title="Staffing OS", layout="wide", page_icon="👥")
+st.sidebar.success("v2.0 Loaded Successfully!")
 DEFAULT_DATA_FILE = 'staffing_db.csv'
 
 # --- 2. CONSTANTS & UTILITIES (INTERNAL) ---
