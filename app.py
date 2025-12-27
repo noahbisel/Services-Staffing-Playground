@@ -142,10 +142,8 @@ def calculate_margin(df, program_mrr_dict):
         mrr = program_mrr_dict.get(prog, 0)
         margin_pct = 0.0
         if mrr > 0:
-            # Multiply by 100 here so 0.905 becomes 90.5
             margin_pct = ((mrr - cost) / mrr) * 100
         else:
-            # Negative 100% if cost exists but no Revenue
             margin_pct = -100.0 if cost > 0 else 0.0
             
         margin_data[prog] = {
@@ -265,31 +263,62 @@ if page == "📊 Dashboard":
         st.divider()
 
         col_l, col_r = st.columns(2)
+        
+        # --- ALLOCATIONS BY PROGRAM (TABLE) ---
         with col_l:
             st.subheader("Allocations by Program")
             if prog_cols:
-                prog_sums = df[prog_cols].sum().sort_values(ascending=True)
+                # Sum and Sort Descending (Highest to Lowest)
+                prog_sums = df[prog_cols].sum().sort_values(ascending=False)
                 prog_sums = prog_sums[prog_sums > 0]
-                fig = px.bar(prog_sums, orientation='h', labels={'index':'Program', 'value':'Hours'})
-                fig.update_xaxes(dtick=25)
-                fig.update_layout(showlegend=False, margin=dict(l=0,r=0,t=0,b=0), height=350)
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # Convert to DataFrame for Table Display
+                prog_table_df = prog_sums.reset_index()
+                prog_table_df.columns = ['Program', 'Hours']
+                
+                st.dataframe(
+                    prog_table_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Program": st.column_config.TextColumn("Program"),
+                        "Hours": st.column_config.NumberColumn("Total Hours", format="%d")
+                    }
+                )
             else:
                 st.info("No program data available.")
+
+        # --- ALLOCATIONS BY EMPLOYEE (TABLE) ---
         with col_r:
             st.subheader("Allocations by Employee")
-            emp_sorted = df.sort_values('Current Hours to Target', ascending=True)
-            fig = px.bar(
-                emp_sorted, 
-                x='Current Hours to Target', 
-                y=emp_sorted.index, 
-                orientation='h',
-                labels={'Current Hours to Target': 'Utilization %', 'Employee': ''},
-                text='Current Hours to Target'
+            
+            # Filter out R+I Roles
+            human_df = df.copy()
+            if 'Role' in human_df.columns:
+                mask = ~human_df['Role'].astype(str).str.upper().str.startswith("R+I")
+                human_df = human_df[mask]
+
+            # Sort Descending (Highest to Lowest)
+            emp_sorted = human_df.sort_values('Current Hours to Target', ascending=False)
+            
+            # Prepare Table
+            emp_table_df = emp_sorted[['Current Hours to Target']].reset_index()
+            emp_table_df.columns = ['Employee', 'Utilization']
+            
+            st.dataframe(
+                emp_table_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Employee": st.column_config.TextColumn("Employee"),
+                    "Utilization": st.column_config.ProgressColumn(
+                        "Utilization %", 
+                        format="%d%%", 
+                        min_value=0, 
+                        max_value=100
+                    )
+                }
             )
-            fig.update_traces(texttemplate='%{text}%', textposition='outside')
-            fig.update_layout(showlegend=False, margin=dict(l=0,r=0,t=0,b=0), height=350)
-            st.plotly_chart(fig, use_container_width=True)
             
         st.divider()
         st.subheader("Contributing Margin by Program")
@@ -300,8 +329,7 @@ if page == "📊 Dashboard":
             for prog, data in margin_metrics.items():
                 table_data.append({
                     "Program": prog,
-                    "Program MRR": f"${data['mrr']:,.0f}", # Formatted with commas here
-                    # "Extended Cost" REMOVED
+                    "Program MRR": f"${data['mrr']:,.0f}", 
                     "Contributing Margin": data['margin_pct']
                 })
             
@@ -314,7 +342,7 @@ if page == "📊 Dashboard":
                 hide_index=True,
                 column_config={
                     "Program": st.column_config.TextColumn("Program"),
-                    "Program MRR": st.column_config.TextColumn("Program MRR"), # Render as Text to keep formatting
+                    "Program MRR": st.column_config.TextColumn("Program MRR"),
                     "Contributing Margin": st.column_config.NumberColumn("Contributing Margin", format="%.1f%%")
                 }
             )
@@ -350,7 +378,6 @@ elif page == "✏️ Staffing Editor":
         if focus == "People":
             all_emps = sorted(df.index.astype(str), key=str.casefold)
             
-            # --- FILTER LOGIC: EXCLUDE IF ROLE STARTS WITH "R+I" ---
             filtered_emps = [
                 e for e in all_emps 
                 if not str(df.loc[e, 'Role']).strip().upper().startswith("R+I")
@@ -387,14 +414,12 @@ elif page == "✏️ Staffing Editor":
                             st.session_state.df = recalculate_utilization(st.session_state.df)
                             st.rerun()
         else:
-            # PROGRAMS VIEW: NO FILTER ON ROLES
             sel_progs = st.multiselect("Select Programs", sorted(prog_cols, key=str.casefold), placeholder="Select programs...")
             if sel_progs:
                 for prog in sel_progs:
                     total = df[prog].sum()
                     
                     m_data = margin_metrics.get(prog, {})
-                    # Base function now returns 90.5, so we NO LONGER multiply by 100 here
                     margin_pct_disp = m_data.get('margin_pct', 0)
                     cost = m_data.get('cost', 0)
                     mrr = m_data.get('mrr', 0)
@@ -472,7 +497,6 @@ elif page == "⚙️ Settings":
             with st.form("new_emp"):
                 st.subheader("Add Employee")
                 n = st.text_input("Name")
-                # UPDATED TO DROP DOWN USING RATE_CARD KEYS
                 r = st.selectbox("Role", list(RATE_CARD.keys()))
                 if st.form_submit_button("Add"):
                     if n and n not in st.session_state.df.index:
