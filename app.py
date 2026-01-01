@@ -262,13 +262,15 @@ if page == "📊 Dashboard":
         
         # --- LEFT: ALLOCATIONS BY PROGRAM (Unaffected by Toggles) ---
         with col_l:
-            # Spacer lines to align header with the toggle-shifted header on the right
+            # SPACERS: Increased to 4 lines to match the height of toggles on the right
             st.write("")
             st.write("")
+            st.write("")
+            st.write("")
+            
             st.subheader("Allocations by Program")
             
-            # Use FULL DF (no filters) for Program view, per instructions
-            # This ensures financial margin reflects all costs
+            # Use FULL DF (no filters) for Program view
             program_analysis_df = df.copy() 
             
             if prog_cols:
