@@ -4,7 +4,7 @@ import plotly.express as px
 import os
 
 # --- 1. APP CONFIGURATION ---
-st.set_page_config(page_title="Staffing OS", layout="wide", page_icon="👥")
+st.set_page_config(page_title="Staffing Sandbox", layout="wide", page_icon="👥")
 DEFAULT_DATA_FILE = 'staffing_db.csv'
 
 # --- 2. CONSTANTS & UTILITIES (INTERNAL) ---
@@ -223,25 +223,20 @@ if page == "📊 Dashboard":
     st.title("📊 Executive Dashboard")
 
     if not df.empty:
-        # --- TOP METRICS (New Math) ---
-        # 1. Team Avg (Strictly ACP, CP, SCP, ACE, CE, SCE)
+        # --- TOP METRICS (Uses Specific Math) ---
         team_util, team_alloc, team_cap = calculate_group_utilization(df, TEAM_ROLES)
         
-        # 2. ACP
         acp_util, acp_alloc, acp_cap = calculate_group_utilization(df, ['ACP'])
         acp_unused = acp_cap - acp_alloc
         
-        # 3. CP / SCP
         cp_util, cp_alloc, cp_cap = calculate_group_utilization(df, ['CP', 'SCP'])
         cp_unused = cp_cap - cp_alloc
         
-        # 4. ACE / CE / SCE
         ce_util, ce_alloc, ce_cap = calculate_group_utilization(df, ['ACE', 'CE', 'SCE'])
         ce_unused = ce_cap - ce_alloc
 
         m1, m2, m3, m4 = st.columns(4)
         
-        # Main Metric with Container Look
         with m1:
             with st.container(border=True):
                 st.metric(
@@ -265,42 +260,28 @@ if page == "📊 Dashboard":
 
         col_l, col_r = st.columns(2)
         
-        # --- LEFT: ALLOCATIONS BY PROGRAM ---
+        # --- LEFT: ALLOCATIONS BY PROGRAM (Unaffected by Toggles) ---
         with col_l:
-            # TOGGLES: Placed ABOVE the title
-            tg1, tg2 = st.columns(2)
-            include_ri = tg1.toggle("Include R+I Roles?", value=True)
-            include_csm = tg2.toggle("Include CSM Roles?", value=True)
-            
+            # Spacer lines to align header with the toggle-shifted header on the right
+            st.write("")
+            st.write("")
             st.subheader("Allocations by Program")
             
-            # --- FILTER LOGIC (Unified for both tables) ---
-            analysis_df = df.copy()
-            if 'Role' in analysis_df.columns:
-                if not include_ri:
-                    # Filter out roles starting with R+I
-                    mask = ~analysis_df['Role'].astype(str).str.upper().str.startswith("R+I")
-                    analysis_df = analysis_df[mask]
-                
-                if not include_csm:
-                    # Filter out roles equal to CSM
-                    mask = analysis_df['Role'].astype(str).str.upper() != "CSM"
-                    analysis_df = analysis_df[mask]
+            # Use FULL DF (no filters) for Program view, per instructions
+            # This ensures financial margin reflects all costs
+            program_analysis_df = df.copy() 
             
             if prog_cols:
-                # Recalculate margins dynamically based on filtered data
-                dynamic_margin = calculate_margin(analysis_df, st.session_state.program_mrr)
-                
+                dynamic_margin = calculate_margin(program_analysis_df, st.session_state.program_mrr)
                 master_data = []
                 for p in prog_cols:
-                    p_hours = analysis_df[p].sum() if p in analysis_df.columns else 0
+                    p_hours = program_analysis_df[p].sum() if p in program_analysis_df.columns else 0
                     if p_hours > 0:
                         m_data = dynamic_margin.get(p, {})
                         mrr_val = m_data.get('mrr', 0)
                         
                         master_data.append({
                             "Program Name": p,
-                            # Store MRR as a string with commas for guaranteed display format
                             "Program MRR": f"${mrr_val:,.0f}", 
                             "Total Hours": int(p_hours),
                             "Contributing Margin": m_data.get('margin_pct', 0)
@@ -309,9 +290,7 @@ if page == "📊 Dashboard":
                 master_df = pd.DataFrame(master_data)
                 
                 if not master_df.empty:
-                    # Sort by Contributing Margin (High to Low)
                     master_df = master_df.sort_values("Contributing Margin", ascending=False)
-                    
                     st.dataframe(
                         master_df,
                         use_container_width=True,
@@ -326,16 +305,27 @@ if page == "📊 Dashboard":
                 else:
                     st.info("No active programs found.")
 
-        # --- RIGHT: ALLOCATIONS BY EMPLOYEE ---
+        # --- RIGHT: ALLOCATIONS BY EMPLOYEE (Affected by Toggles) ---
         with col_r:
-            # Spacer to align headers visually with the left side (compensating for toggles)
-            st.write("") 
-            st.write("") 
-            st.write("") 
+            # TOGGLES ABOVE HEADER
+            tg1, tg2 = st.columns(2)
+            include_ri = tg1.toggle("Include R+I Roles?", value=True)
+            include_csm = tg2.toggle("Include CSM Roles?", value=True)
+            
             st.subheader("Allocations by Employee")
             
-            # Use the SAME analysis_df (which respects both toggles)
-            emp_sorted = analysis_df.sort_values('Current Hours to Target', ascending=False)
+            # APPLY FILTERS ONLY TO EMPLOYEE VIEW
+            emp_view_df = df.copy()
+            if 'Role' in emp_view_df.columns:
+                if not include_ri:
+                    mask = ~emp_view_df['Role'].astype(str).str.upper().str.startswith("R+I")
+                    emp_view_df = emp_view_df[mask]
+                
+                if not include_csm:
+                    mask = emp_view_df['Role'].astype(str).str.upper() != "CSM"
+                    emp_view_df = emp_view_df[mask]
+
+            emp_sorted = emp_view_df.sort_values('Current Hours to Target', ascending=False)
             emp_table_df = emp_sorted[['Current Hours to Target']].reset_index()
             emp_table_df.columns = ['Employee', 'Utilization']
             
